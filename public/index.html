@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Audio Preview</title>
+<style>
+  :root {
+    --bg: #0f0f0f;
+    --surface: #1a1a1a;
+    --surface-hover: #252525;
+    --border: #2a2a2a;
+    --text: #e0e0e0;
+    --text-dim: #888;
+    --accent: #7c6cff;
+    --accent-glow: rgba(124, 108, 255, 0.25);
+    --playing: #4cff8d;
+    --roblox: #00b06f;
+    --roblox-hover: #00d484;
+    --error: #ff4c4c;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Header ─────────────────────────────────────── */
+  header {
+    padding: 20px 28px 14px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  header h1 { font-size: 1.3rem; font-weight: 600; white-space: nowrap; }
+  #count { color: var(--text-dim); font-size: 0.85rem; }
+
+  #search {
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--text);
+    font-size: 0.85rem;
+    width: 220px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  #search:focus { border-color: var(--accent); }
+
+  .header-right {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  /* ── Settings toggle button ─────────────────────── */
+  .settings-btn {
+    padding: 6px 14px;
+    border: 1px solid var(--roblox);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--roblox);
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+  .settings-btn:hover { background: var(--roblox); color: #fff; }
+  .settings-btn.active { background: var(--roblox); color: #fff; }
+
+  /* ── Settings panel ─────────────────────────────── */
+  #settings {
+    display: none;
+    padding: 16px 28px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    gap: 12px;
+  }
+  #settings.open { display: flex; flex-wrap: wrap; align-items: flex-end; }
+  #settings label {
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  #settings input {
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 0.82rem;
+    outline: none;
+    font-family: monospace;
+  }
+  #settings input:focus { border-color: var(--accent); }
+  #apiKey { width: 320px; }
+  #userId { width: 140px; }
+  .settings-status {
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    align-self: center;
+    margin-left: 8px;
+  }
+  .settings-status.ok { color: var(--roblox); }
+
+  /* ── Now-playing bar ────────────────────────────── */
+  #now-playing {
+    padding: 10px 28px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    font-size: 0.82rem;
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 42px;
+  }
+  #now-playing .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--playing);
+    flex-shrink: 0;
+    animation: pulse 1.2s infinite;
+  }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+  #now-playing.hidden { display: none; }
+  #np-name { color: var(--text); font-weight: 500; }
+  #np-time { margin-left: auto; font-variant-numeric: tabular-nums; }
+
+  /* ── File list ──────────────────────────────────── */
+  #list { flex: 1; overflow-y: auto; padding: 6px 0; }
+
+  .row {
+    display: flex;
+    align-items: center;
+    padding: 10px 28px;
+    cursor: pointer;
+    transition: background 0.15s;
+    gap: 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .row:hover { background: var(--surface-hover); }
+  .row.active {
+    background: var(--accent-glow);
+    border-left: 3px solid var(--accent);
+    padding-left: 25px;
+  }
+
+  .row .icon {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    font-size: 12px;
+    transition: background 0.2s, border-color 0.2s;
+  }
+  .row.active .icon { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .row:hover .icon { border-color: var(--accent); }
+
+  .row .name {
+    flex: 1;
+    font-size: 0.88rem;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .row .folder {
+    color: var(--text-dim);
+    font-size: 0.75rem;
+    max-width: 220px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .row .ext {
+    color: var(--text-dim);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    flex-shrink: 0;
+  }
+
+  /* ── Upload button & status ─────────────────────── */
+  .upload-btn {
+    padding: 4px 10px;
+    border: 1px solid var(--roblox);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--roblox);
+    font-size: 0.72rem;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .upload-btn:hover { background: var(--roblox); color: #fff; }
+  .upload-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
+    pointer-events: none;
+  }
+  .upload-btn.uploading {
+    border-color: var(--accent);
+    color: var(--accent);
+    cursor: wait;
+  }
+  .upload-btn.done {
+    border-color: var(--playing);
+    color: var(--playing);
+    cursor: default;
+  }
+  .upload-btn.error {
+    border-color: var(--error);
+    color: var(--error);
+  }
+
+  .asset-id {
+    font-size: 0.72rem;
+    color: var(--playing);
+    font-family: monospace;
+    flex-shrink: 0;
+    cursor: pointer;
+    transition: color 0.15s;
+  }
+  .asset-id:hover { color: #fff; }
+
+  /* ── Scrollbar ──────────────────────────────────── */
+  #list::-webkit-scrollbar { width: 8px; }
+  #list::-webkit-scrollbar-track { background: var(--bg); }
+  #list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  #list::-webkit-scrollbar-thumb:hover { background: #444; }
+
+  /* ── Empty state ────────────────────────────────── */
+  #empty {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    gap: 12px;
+    color: var(--text-dim);
+  }
+  #empty .big { font-size: 2.5rem; }
+  #empty p { font-size: 0.9rem; max-width: 360px; text-align: center; line-height: 1.5; }
+
+  /* ── Toast notification ─────────────────────────── */
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    padding: 10px 18px;
+    border-radius: 8px;
+    font-size: 0.82rem;
+    color: #fff;
+    background: #333;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+    z-index: 100;
+  }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Audio Preview</h1>
+  <span id="count"></span>
+  <div class="header-right">
+    <input type="text" id="search" placeholder="Filter files..." autocomplete="off" />
+    <button class="settings-btn" id="settings-toggle">Roblox Upload</button>
+  </div>
+</header>
+
+<div id="settings">
+  <label>
+    API Key
+    <input type="password" id="apiKey" placeholder="paste your Open Cloud API key" />
+  </label>
+  <label>
+    User ID <span style="font-size:0.7rem;color:var(--text-dim)">(personal uploads)</span>
+    <input type="text" id="userId" placeholder="e.g. 1234567" />
+  </label>
+  <span style="color:var(--text-dim);font-size:0.82rem;align-self:center;">or</span>
+  <label>
+    Group ID <span style="font-size:0.7rem;color:var(--text-dim)">(group uploads)</span>
+    <input type="text" id="groupId" placeholder="e.g. 7654321" />
+  </label>
+  <span class="settings-status" id="settings-status"></span>
+</div>
+
+<div id="now-playing" class="hidden">
+  <span class="dot"></span>
+  <span id="np-name"></span>
+  <span id="np-time"></span>
+</div>
+
+<div id="list"></div>
+
+<div id="empty">
+  <div class="big">&#127911;</div>
+  <p>No audio files found. Drop <code>.zip</code> files or audio files into the <code>audios/</code> folder and restart the server.</p>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const listEl    = document.getElementById("list");
+const emptyEl   = document.getElementById("empty");
+const countEl   = document.getElementById("count");
+const searchEl  = document.getElementById("search");
+const npBar     = document.getElementById("now-playing");
+const npName    = document.getElementById("np-name");
+const npTime    = document.getElementById("np-time");
+const settingsEl = document.getElementById("settings");
+const settingsToggle = document.getElementById("settings-toggle");
+const apiKeyEl  = document.getElementById("apiKey");
+const userIdEl  = document.getElementById("userId");
+const groupIdEl = document.getElementById("groupId");
+const settingsStatus = document.getElementById("settings-status");
+const toastEl   = document.getElementById("toast");
+
+let allFiles = [];
+let audio    = new Audio();
+let activeRow = null;
+let activePath = null;
+let timeInterval = null;
+
+// Track uploaded asset IDs: { filePath: assetId }
+const uploadedAssets = {};
+// Track in-flight uploads to prevent doubles
+const uploading = new Set();
+
+// ── Toast ────────────────────────────────────────
+let toastTimer;
+function showToast(msg) {
+  toastEl.textContent = msg;
+  toastEl.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove("show"), 3000);
+}
+
+// ── Settings panel toggle ────────────────────────
+settingsToggle.addEventListener("click", () => {
+  const open = settingsEl.classList.toggle("open");
+  settingsToggle.classList.toggle("active", open);
+});
+
+// Save/load settings from sessionStorage-like approach (just keep in memory)
+function getApiKey() { return apiKeyEl.value.trim(); }
+function getUserId() { return userIdEl.value.trim(); }
+function getGroupId() { return groupIdEl.value.trim(); }
+
+function isRobloxConfigured() {
+  return getApiKey().length > 10 && (getUserId().length > 0 || getGroupId().length > 0);
+}
+
+// Update status indicator when fields change
+apiKeyEl.addEventListener("input", updateSettingsStatus);
+userIdEl.addEventListener("input", updateSettingsStatus);
+groupIdEl.addEventListener("input", updateSettingsStatus);
+function updateSettingsStatus() {
+  if (isRobloxConfigured()) {
+    const target = getGroupId() ? `group ${getGroupId()}` : `user ${getUserId()}`;
+    settingsStatus.textContent = `Ready — uploading to ${target}`;
+    settingsStatus.className = "settings-status ok";
+  } else {
+    settingsStatus.textContent = "Enter API key + User ID or Group ID";
+    settingsStatus.className = "settings-status";
+  }
+  const q = searchEl.value.toLowerCase().trim();
+  renderList(q ? allFiles.filter(f => f.toLowerCase().includes(q)) : allFiles);
+}
+
+// ── Roblox supported extensions ──────────────────
+const ROBLOX_SUPPORTED = new Set([".mp3", ".ogg", ".wav", ".flac"]);
+function isRobloxSupported(filePath) {
+  const ext = "." + filePath.split(".").pop().toLowerCase();
+  return ROBLOX_SUPPORTED.has(ext);
+}
+
+// ── Fetch file list ──────────────────────────────
+async function loadFiles() {
+  const res = await fetch("/api/files");
+  allFiles = await res.json();
+  countEl.textContent = `${allFiles.length} file${allFiles.length !== 1 ? "s" : ""}`;
+  renderList(allFiles);
+}
+
+// ── Render rows ──────────────────────────────────
+function renderList(files) {
+  listEl.innerHTML = "";
+  if (files.length === 0) {
+    emptyEl.style.display = allFiles.length === 0 ? "flex" : "none";
+    if (allFiles.length > 0) {
+      const div = document.createElement("div");
+      div.style.cssText = "padding:40px 28px;color:var(--text-dim);font-size:0.9rem;";
+      div.textContent = "No matches.";
+      listEl.appendChild(div);
+    }
+    return;
+  }
+  emptyEl.style.display = "none";
+
+  const configured = isRobloxConfigured();
+
+  for (const filePath of files) {
+    const parts = filePath.split("/");
+    const fileName = parts.pop();
+    const folder = parts.join("/");
+    const ext = fileName.split(".").pop();
+
+    const row = document.createElement("div");
+    row.className = "row";
+    if (filePath === activePath) row.classList.add("active");
+
+    // Play icon
+    const iconHtml = filePath === activePath && !audio.paused ? "&#9646;&#9646;" : "&#9654;";
+
+    // Upload button / asset ID
+    let uploadHtml = "";
+    if (uploadedAssets[filePath]) {
+      uploadHtml = `<span class="asset-id" data-id="${uploadedAssets[filePath]}" title="Click to copy">${uploadedAssets[filePath]}</span>`;
+    } else if (configured && isRobloxSupported(filePath)) {
+      const isUploading = uploading.has(filePath);
+      if (isUploading) {
+        uploadHtml = `<button class="upload-btn uploading" disabled>Uploading...</button>`;
+      } else {
+        uploadHtml = `<button class="upload-btn" data-upload="${filePath}">Upload</button>`;
+      }
+    } else if (configured && !isRobloxSupported(filePath)) {
+      uploadHtml = `<span style="font-size:0.68rem;color:var(--text-dim);" title="Roblox only accepts .mp3, .ogg, .wav, .flac">N/A</span>`;
+    }
+
+    row.innerHTML = `
+      <div class="icon">${iconHtml}</div>
+      <span class="name">${fileName}</span>
+      ${folder ? `<span class="folder">${folder}</span>` : ""}
+      <span class="ext">${ext}</span>
+      ${uploadHtml}
+    `;
+
+    // Click on row = play (but not if clicking upload button or asset ID)
+    row.addEventListener("click", (e) => {
+      if (e.target.closest(".upload-btn") || e.target.closest(".asset-id")) return;
+      togglePlay(filePath, row);
+    });
+
+    // Upload button click
+    const uploadBtn = row.querySelector(".upload-btn[data-upload]");
+    if (uploadBtn) {
+      uploadBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        uploadToRoblox(filePath);
+      });
+    }
+
+    // Asset ID click to copy
+    const assetIdEl = row.querySelector(".asset-id");
+    if (assetIdEl) {
+      assetIdEl.addEventListener("click", (e) => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(assetIdEl.dataset.id);
+        showToast(`Copied asset ID: ${assetIdEl.dataset.id}`);
+      });
+    }
+
+    listEl.appendChild(row);
+  }
+}
+
+// ── Upload to Roblox ─────────────────────────────
+async function uploadToRoblox(filePath) {
+  if (uploading.has(filePath) || uploadedAssets[filePath]) return;
+
+  uploading.add(filePath);
+  refreshCurrentList();
+
+  try {
+    // 1) Start the upload
+    const uploadRes = await fetch("/api/roblox/upload", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        apiKey: getApiKey(),
+        userId: getUserId() || undefined,
+        groupId: getGroupId() || undefined,
+        filePath: filePath,
+      }),
+    });
+
+    const uploadData = await uploadRes.json();
+
+    if (!uploadRes.ok) {
+      throw new Error(uploadData.error || "Upload failed");
+    }
+
+    // 2) Extract operation ID and poll for result
+    const opPath = uploadData.path; // "operations/{operationId}"
+    if (!opPath) throw new Error("No operation path returned");
+    const operationId = opPath.replace("operations/", "");
+
+    const assetId = await pollOperation(operationId);
+    uploadedAssets[filePath] = assetId;
+    showToast(`Uploaded! Asset ID: ${assetId}`);
+
+  } catch (e) {
+    showToast(`Upload failed: ${e.message}`);
+    console.error("Upload error:", e);
+  } finally {
+    uploading.delete(filePath);
+    refreshCurrentList();
+  }
+}
+
+async function pollOperation(operationId) {
+  const maxAttempts = 30;
+  for (let i = 0; i < maxAttempts; i++) {
+    await new Promise(r => setTimeout(r, 2000)); // wait 2s between polls
+
+    const res = await fetch("/api/roblox/poll", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ apiKey: getApiKey(), operationId }),
+    });
+
+    const data = await res.json();
+
+    if (data.done) {
+      if (data.response && data.response.assetId) {
+        return data.response.assetId;
+      }
+      // Check for error
+      if (data.error) {
+        throw new Error(data.error.message || "Moderation rejected");
+      }
+      // Sometimes assetId is nested differently
+      if (data.response && data.response.path) {
+        const match = data.response.path.match(/assets\/(\d+)/);
+        if (match) return match[1];
+      }
+      throw new Error("Upload completed but no asset ID found");
+    }
+  }
+  throw new Error("Timed out waiting for Roblox to process the upload");
+}
+
+function refreshCurrentList() {
+  const q = searchEl.value.toLowerCase().trim();
+  renderList(q ? allFiles.filter(f => f.toLowerCase().includes(q)) : allFiles);
+}
+
+// ── Play / Pause ─────────────────────────────────
+function togglePlay(filePath, row) {
+  if (filePath === activePath) {
+    if (audio.paused) {
+      audio.play();
+      row.querySelector(".icon").innerHTML = "&#9646;&#9646;";
+      npBar.classList.remove("hidden");
+    } else {
+      audio.pause();
+      row.querySelector(".icon").innerHTML = "&#9654;";
+    }
+    return;
+  }
+
+  audio.pause();
+  if (activeRow) {
+    activeRow.classList.remove("active");
+    activeRow.querySelector(".icon").innerHTML = "&#9654;";
+  }
+
+  activePath = filePath;
+  activeRow = row;
+  audio.src = "/audio/" + encodeURI(filePath);
+  audio.play();
+
+  row.classList.add("active");
+  row.querySelector(".icon").innerHTML = "&#9646;&#9646;";
+
+  npName.textContent = filePath.split("/").pop();
+  npBar.classList.remove("hidden");
+  clearInterval(timeInterval);
+  timeInterval = setInterval(updateTime, 250);
+}
+
+function updateTime() {
+  if (!audio.duration) { npTime.textContent = ""; return; }
+  npTime.textContent = `${fmt(audio.currentTime)} / ${fmt(audio.duration)}`;
+}
+function fmt(s) {
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60);
+  return `${m}:${sec.toString().padStart(2, "0")}`;
+}
+
+audio.addEventListener("ended", () => {
+  if (activeRow) activeRow.querySelector(".icon").innerHTML = "&#9654;";
+  npBar.classList.add("hidden");
+  clearInterval(timeInterval);
+});
+
+// ── Search / filter ──────────────────────────────
+searchEl.addEventListener("input", () => {
+  const q = searchEl.value.toLowerCase().trim();
+  if (!q) { renderList(allFiles); return; }
+  renderList(allFiles.filter((f) => f.toLowerCase().includes(q)));
+});
+
+// ── Init ─────────────────────────────────────────
+loadFiles();
+</script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+{
+  "name": "audio-preview",
+  "version": "1.0.0",
+  "description": "Quick audio file browser and player",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "adm-zip": "^0.5.17",
+    "express": "^4.21.0",
+    "music-metadata": "^11.12.3"
+  }
+}
