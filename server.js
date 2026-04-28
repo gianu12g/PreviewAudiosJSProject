@@ -2,9 +2,10 @@ const express = require("express");
 const path = require("path");
 const fs = require("fs");
 const { execSync } = require("child_process");
+const multer = require("multer");
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 // ── Config ──────────────────────────────────────────────────────────
 const AUDIO_DIR = path.join(__dirname, "audios");
@@ -192,6 +193,58 @@ app.get("/api/files", (_req, res) => {
 app.post("/api/extract", (_req, res) => {
   extractZips();
   res.json({ ok: true });
+});
+
+// ── File upload (audio files & zips via browser) ───────────────────
+const ALLOWED_UPLOAD_EXTENSIONS = new Set([
+  ...AUDIO_EXTENSIONS,
+  ".zip",
+]);
+
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, AUDIO_DIR),
+    filename: (_req, file, cb) => {
+      const safe = file.originalname.replace(/[^a-zA-Z0-9._\-() ]/g, "_");
+      const dest = path.join(AUDIO_DIR, safe);
+      if (fs.existsSync(dest)) {
+        cb(null, `${Date.now()}_${safe}`);
+      } else {
+        cb(null, safe);
+      }
+    },
+  }),
+  limits: { fileSize: 200 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (ALLOWED_UPLOAD_EXTENSIONS.has(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error(`File type ${ext} is not allowed`));
+    }
+  },
+});
+
+app.post("/api/upload", upload.array("files", 50), (req, res) => {
+  if (!req.files || req.files.length === 0) {
+    return res.status(400).json({ error: "No files uploaded" });
+  }
+  const zips = req.files.filter((f) => f.originalname.toLowerCase().endsWith(".zip"));
+  if (zips.length > 0) {
+    extractZips();
+  }
+  const saved = req.files.map((f) => f.filename);
+  res.json({ ok: true, files: saved, count: saved.length });
+});
+
+app.use((err, _req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    return res.status(400).json({ error: err.message });
+  }
+  if (err) {
+    return res.status(400).json({ error: err.message });
+  }
+  next();
 });
 
 // ── Roblox Open Cloud — Upload Audio ────────────────────────────────
