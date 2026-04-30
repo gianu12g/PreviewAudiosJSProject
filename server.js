@@ -8,7 +8,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // ── Config ──────────────────────────────────────────────────────────
-const AUDIO_DIR = path.join(__dirname, "audios");
+const AUDIO_DIR = path.join(__dirname, "all-audios");
 
 const AUDIO_EXTENSIONS = new Set([
   ".mp3", ".wav", ".ogg", ".flac", ".aac", ".m4a", ".wma", ".webm", ".opus",
